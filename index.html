@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1a14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Maze Adventure" />
+  <meta name="description" content="Guide a cute explorer through colorful toy mazes. Procedural levels from Easy for little kids to Very Hard challenges." />
+  <title>Maze Adventure</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="cv" width="390" height="700"></canvas>
+    <div id="versionTag"></div>
+
+    <!-- MENU -->
+    <div class="screen" data-screen="menu" id="screenMenu">
+      <div class="menu-card">
+        <img class="logo-icon" src="icons/icon-192.png" alt="" width="72" height="72" />
+        <h1><span class="c1">Maze</span> <span class="c2">Adventure</span></h1>
+        <p class="tagline">Find the way · have fun</p>
+
+        <div class="stats">
+          <div><span class="lbl">Cleared</span><strong id="statGames">0</strong></div>
+          <div><span class="lbl">Story</span><strong id="statAdv">1/12</strong></div>
+          <div><span class="lbl">Stars</span><strong id="statStars">0</strong></div>
+        </div>
+
+        <p id="firstTip" class="first-tip hidden">
+          New here? Tap <b>Adventure</b> — short stages made for little explorers 🌱
+        </p>
+
+        <button id="btnAdventure" class="primary" type="button">📖  Adventure</button>
+        <button id="btnPlay" class="secondary" type="button">▶  Quick maze</button>
+        <button id="btnDaily" class="secondary" type="button">📅  Daily maze</button>
+        <button id="btnFreePlay" class="secondary" type="button">🛠  Free play</button>
+        <button id="btnSettings" class="secondary" type="button">⚙  Settings</button>
+        <button id="btnHow" class="secondary" type="button">How to play</button>
+        <button id="muteBtn" class="ghost" type="button">🔊 Sound on</button>
+        <button id="btnHub" class="ghost" type="button">← Arcade Hub</button>
+
+        <div id="howPanel" class="how hidden">
+          <ol>
+            <li><b>Adventure</b> — story stages unlock themes.</li>
+            <li>Move with <b>arrows / WASD</b> or the <b>big stick</b>.</li>
+            <li>Go from the <b>yellow start</b> to the <b>glowing goal</b>.</li>
+            <li>Tap <b>?</b> for a gentle path hint. No lives!</li>
+            <li><b>Free play</b> — parents can set size &amp; help.</li>
+            <li>Hard mazes may have a <b>yellow switch</b> to open a <b>locked gate</b>.</li>
+            <li>Gamepad: stick / D-pad move · A hint · Start pause</li>
+          </ol>
+        </div>
+        <p id="versionMenu" class="ver"></p>
+      </div>
+    </div>
+
+    <!-- ADVENTURE -->
+    <div class="screen hidden" data-screen="adventure" id="screenAdventure">
+      <div class="menu-card wide">
+        <h2>Adventure</h2>
+        <p class="tagline" id="advSub">Clear stages · unlock worlds</p>
+        <div id="advList" class="adv-list"></div>
+        <button id="btnAdvContinue" class="primary" type="button">▶  Continue</button>
+        <button id="btnAdvBack" class="secondary" type="button">← Back</button>
+        <p id="versionAdv" class="ver"></p>
+      </div>
+    </div>
+
+    <!-- DIFFICULTY (quick / daily) -->
+    <div class="screen hidden" data-screen="difficulty" id="screenDiff">
+      <div class="menu-card">
+        <h2 id="diffTitle">Pick a maze</h2>
+        <p class="tagline" id="diffSub">Every maze is brand new</p>
+        <div id="diffRow" class="diff-row"></div>
+        <button id="btnDiffBack" class="secondary" type="button">← Back</button>
+        <p id="versionDiff" class="ver"></p>
+      </div>
+    </div>
+
+    <!-- FREE PLAY -->
+    <div class="screen hidden" data-screen="freeplay" id="screenFreePlay">
+      <div class="menu-card wide">
+        <h2>Free play</h2>
+        <p class="tagline">Parent / custom maze</p>
+
+        <label class="field">
+          <span>Size</span>
+          <input type="range" id="fpSize" min="5" max="20" value="10" />
+          <strong id="fpSizeVal">10</strong>
+        </label>
+        <label class="field">
+          <span>Stars</span>
+          <input type="range" id="fpCollect" min="0" max="8" value="3" />
+          <strong id="fpCollectVal">3</strong>
+        </label>
+        <label class="field">
+          <span>Loops</span>
+          <input type="range" id="fpLoops" min="0" max="25" value="10" />
+          <strong id="fpLoopsVal">10%</strong>
+        </label>
+
+        <p class="setting-label">Theme</p>
+        <div id="fpThemes" class="chip-row wrap"></div>
+        <p class="setting-label">Character</p>
+        <div id="fpChars" class="chip-row wrap"></div>
+
+        <label class="check-row">
+          <input type="checkbox" id="fpGuided" />
+          <span>Guided movement</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="fpHints" checked />
+          <span>Hints</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="fpGlow" />
+          <span>Path glow</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="fpTimer" />
+          <span>Show timer</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="fpGates" />
+          <span>Switch + gate puzzle</span>
+        </label>
+        <label class="field">
+          <span>Seed (optional)</span>
+          <input type="text" id="fpSeed" class="text-input" placeholder="random" autocomplete="off" />
+        </label>
+
+        <button id="btnFpStart" class="primary" type="button">▶  Start maze</button>
+        <button id="btnFpBack" class="secondary" type="button">← Back</button>
+        <p id="versionFp" class="ver"></p>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen hidden" data-screen="settings" id="screenSettings">
+      <div class="menu-card">
+        <h2>Settings</h2>
+        <p class="tagline">Make it comfy</p>
+
+        <p class="setting-label">Movement</p>
+        <div class="chip-row" role="group" aria-label="Movement style">
+          <button type="button" class="mode-chip" data-move-pref="auto">Auto</button>
+          <button type="button" class="mode-chip" data-move-pref="guided">Guided</button>
+          <button type="button" class="mode-chip" data-move-pref="free">Free</button>
+        </div>
+        <p class="setting-help">Guided is best for little kids — stays in the middle of paths.</p>
+
+        <label class="check-row">
+          <input type="checkbox" id="chkReducedMotion" />
+          <span>Reduced motion</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="chkHighContrast" />
+          <span>High contrast path</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="chkShowSeed" />
+          <span>Show maze seed (debug)</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="chkVoicePraise" />
+          <span>Spoken praise on win</span>
+        </label>
+
+        <button id="btnSettingsBack" class="primary" type="button">Done</button>
+        <p id="versionSettings" class="ver"></p>
+      </div>
+    </div>
+
+    <!-- PLAY chrome -->
+    <button id="btnPauseMenu" class="icon-btn play-chrome hidden" type="button" title="Menu" aria-label="Pause">☰</button>
+    <button id="btnHint" class="icon-btn play-chrome hint-btn hidden" type="button" title="Hint" aria-label="Hint">?</button>
+    <button id="btnRestartPlay" class="icon-btn play-chrome restart-btn hidden" type="button" title="Restart" aria-label="Restart">↻</button>
+    <p id="playHint" class="hint play-chrome hidden">Drag the stick · reach the star</p>
+
+    <!-- PAUSE -->
+    <div class="screen hidden" data-screen="pause" id="screenPause">
+      <div class="menu-card">
+        <h2>Paused</h2>
+        <p class="tagline">Take a breath</p>
+        <p id="pauseSeed" class="seed-line hidden"></p>
+        <button id="btnResume" class="primary" type="button">▶  Resume</button>
+        <button id="btnPauseRestart" class="secondary" type="button">↻  Restart</button>
+        <button id="btnPauseMenuHome" class="secondary" type="button">Main menu</button>
+        <p id="versionPause" class="ver"></p>
+      </div>
+    </div>
+
+    <!-- WIN -->
+    <div class="screen hidden" data-screen="win" id="screenWin">
+      <div class="menu-card win-card">
+        <h2>You did it!</h2>
+        <p class="win-banner">🎉 Maze clear</p>
+        <p class="tagline" id="winPraise">Great exploring</p>
+        <p id="winUnlock" class="unlock-line hidden"></p>
+
+        <div class="stats tall">
+          <div><span class="lbl">Level</span><strong id="winDiff">Easy</strong></div>
+          <div><span class="lbl">Stars</span><strong id="winStars">0/0</strong></div>
+          <div><span class="lbl">Time</span><strong id="winTime">0s</strong></div>
+        </div>
+        <p id="winSeed" class="seed-line hidden"></p>
+        <button id="btnCopySeed" class="ghost hidden" type="button">📋 Copy seed</button>
+
+        <button id="btnNext" class="primary big-next" type="button">▶  Next maze</button>
+        <button id="btnReplay" class="secondary" type="button">↻  Replay</button>
+        <button id="btnMenuWin" class="secondary" type="button">Main menu</button>
+        <button id="btnHubWin" class="ghost" type="button">← Arcade Hub</button>
+        <p id="versionWin" class="ver"></p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "Maze Adventure",
+  "short_name": "Maze",
+  "description": "Guide a cute explorer through colorful toy mazes. Procedural levels for kids and challenge seekers.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c1a14",
+  "theme_color": "#0c1a14",
+  "categories": ["games", "entertainment", "kids"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
