@@ -407,16 +407,26 @@ export class GameSession {
       this.tapGoal = null;
     }
 
-    // Fresh screen-space tap → one step toward that maze cell
+    // Fresh screen-space tap → walk open straight corridor to that cell
     if (input.tap && stickMag <= 0.18) {
       this._applyTap(input.tap, canEnter);
     }
 
-    // While walking to a tapped square, feed that direction as axis input
+    // While walking to a tapped square, keep feeding direction until arrival
+    // (multi-cell runs: same heading through intermediate corridor cells)
     let moveInput = { x: input.x, y: input.y };
     if (this.tapGoal && stickMag <= 0.18) {
-      const axis = dirToAxis(this.tapGoal.dir);
-      moveInput = { x: axis.x, y: axis.y };
+      // Re-aim from current cell in case of mid-run retarget; stay on goal dir
+      const here = this.guided
+        ? { x: this.guided.cellX, y: this.guided.cellY }
+        : worldToCell(this.layout, this.maze, this.player.x, this.player.y);
+      if (here.x === this.tapGoal.x && here.y === this.tapGoal.y) {
+        // At goal cell — settle will clear; hold still if already centered
+        moveInput = { x: 0, y: 0 };
+      } else {
+        const axis = dirToAxis(this.tapGoal.dir);
+        moveInput = { x: axis.x, y: axis.y };
+      }
     }
 
     if (this.movementMode === 'guided') {
@@ -532,7 +542,7 @@ export class GameSession {
   }
 
   /**
-   * Map a stage-space tap to a one-cell walk goal.
+   * Map a stage-space tap to a walk goal (full open straight corridor).
    * @param {{ x: number, y: number }} stageTap
    * @param {(cx: number, cy: number) => boolean} canEnter
    */
@@ -559,6 +569,11 @@ export class GameSession {
           if (this.audio && this.audio.bump) this.audio.bump();
         }
       }
+      return;
+    }
+    // Already there (or goal is current cell after partial resolve)
+    if (step.x === fromX && step.y === fromY) {
+      this.tapGoal = null;
       return;
     }
     this.tapGoal = step;

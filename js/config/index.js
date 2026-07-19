@@ -5,7 +5,7 @@
 
 // ---- Version (MAJOR.MINOR.PATCH) --------------------------------------------
 // Keep CACHE in sw.js in sync when PWA ships: 'maze-adventure-' + GAME_VERSION
-export const GAME_VERSION = '1.2.004';
+export const GAME_VERSION = '1.2.005';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Maze Adventure';
 

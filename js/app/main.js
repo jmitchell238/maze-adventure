@@ -280,7 +280,7 @@ function beginPlay() {
   const hint = document.getElementById('playHint');
   if (hint) {
     const ch = session.character();
-    hint.textContent = `${ch.emoji} ${ch.goalHint} · tap the next square`;
+    hint.textContent = `${ch.emoji} ${ch.goalHint} · tap a square ahead`;
   }
 }
 

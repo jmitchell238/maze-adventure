@@ -386,7 +386,7 @@ const {
   createGuidedState, integrateGuidedMove, openDirs, axisToDir,
 } = await import(js('js/domain/movement/guided.js'));
 const {
-  resolveTapStep, dirTowardCell, canStep, dirToAxis,
+  resolveTapStep, resolveStraightTap, dirTowardCell, canStep, dirToAxis,
 } = await import(js('js/domain/movement/tap.js'));
 const { createMemorySave } = await import(js('js/adapters/save.js'));
 const { createSilentAudio } = await import(js('js/adapters/audio.js'));
@@ -628,21 +628,22 @@ section('tap-to-move (default touch)');
   assertEq(dirTowardCell(0, 0, 0, 2), 'south', 'dirToward south');
   assertEq(dirTowardCell(1, 1, 1, 1), null, 'dirToward same');
 
-  // Tiny open corridor: (0,0)-(1,0)-(2,0) carved east-west
+  // Open corridor: (0,0)-(1,0)-(2,0)-(3,0) carved east-west; wall blocks after 3
   const maze = {
     rows: 1,
-    cols: 3,
+    cols: 4,
     cells: [
       { x: 0, y: 0, north: true, south: true, east: false, west: true, open: true },
       { x: 1, y: 0, north: true, south: true, east: false, west: false, open: true },
-      { x: 2, y: 0, north: true, south: true, east: true, west: false, open: true },
+      { x: 2, y: 0, north: true, south: true, east: false, west: false, open: true },
+      { x: 3, y: 0, north: true, south: true, east: true, west: false, open: true },
     ],
     entrance: { x: 0, y: 0 },
-    exit: { x: 2, y: 0 },
+    exit: { x: 3, y: 0 },
     collectibles: [],
     seed: 'tap',
     difficultyId: 'easy',
-    solution: [0, 1, 2],
+    solution: [0, 1, 2, 3],
     metrics: {},
   };
 
@@ -655,11 +656,42 @@ section('tap-to-move (default touch)');
   assertEq(resolveTapStep(maze, 0, 0, 0, 0), null, 'same cell tap is null');
   assertEq(resolveTapStep(maze, 0, 0, 0, 1), null, 'blocked direction null');
 
-  // Fat finger: tap two cells away → still one step toward it
-  const far = resolveTapStep(maze, 0, 0, 2, 0);
-  assert(far && far.x === 1 && far.y === 0 && far.dir === 'east', 'far tap walks one step');
+  // Straight corridor: tap end → full run (not just one step)
+  const far = resolveTapStep(maze, 0, 0, 3, 0);
+  assert(far && far.x === 3 && far.y === 0 && far.dir === 'east', 'far straight tap walks full corridor');
+  const mid = resolveStraightTap(maze, 0, 0, 2, 0);
+  assert(mid && mid.x === 2 && mid.y === 0, 'mid corridor tap lands on tapped cell');
 
-  // GameSession: stage tap moves one guided cell then stops
+  // Diagonal is not a straight corridor → one-step assist only
+  const diagMaze = {
+    rows: 2,
+    cols: 2,
+    cells: [
+      { x: 0, y: 0, north: true, south: false, east: false, west: true, open: true },
+      { x: 1, y: 0, north: true, south: true, east: true, west: false, open: true },
+      { x: 0, y: 1, north: false, south: true, east: true, west: true, open: true },
+      { x: 1, y: 1, north: true, south: true, east: true, west: true, open: true },
+    ],
+  };
+  const diag = resolveTapStep(diagMaze, 0, 0, 1, 1);
+  assert(diag && (diag.x !== 1 || diag.y !== 1), 'diagonal does not path around corners');
+  assert(diag && Math.abs(diag.x - 0) + Math.abs(diag.y - 0) === 1, 'diagonal fat-finger is one step');
+
+  // Partial open: wall at x=2 means tap beyond only reaches last open
+  const blocked = {
+    rows: 1,
+    cols: 4,
+    cells: [
+      { x: 0, y: 0, north: true, south: true, east: false, west: true, open: true },
+      { x: 1, y: 0, north: true, south: true, east: true, west: false, open: true },
+      { x: 2, y: 0, north: true, south: true, east: false, west: true, open: true },
+      { x: 3, y: 0, north: true, south: true, east: true, west: false, open: true },
+    ],
+  };
+  const part = resolveStraightTap(blocked, 0, 0, 3, 0);
+  assert(part && part.x === 1 && part.y === 0, 'blocked corridor stops at last open cell');
+
+  // GameSession: multi-cell straight tap walks full run then stops
   {
     const save = createMemorySave();
     const audio = createSilentAudio();
@@ -669,36 +701,44 @@ section('tap-to-move (default touch)');
     const opens = openDirs(session.maze, en.x, en.y);
     assert(opens.length >= 1, 'entrance open for tap test');
     const dir = opens[0];
-    const { dx, dy } = dir === 'east' ? { dx: 1, dy: 0 }
-      : dir === 'west' ? { dx: -1, dy: 0 }
-        : dir === 'south' ? { dx: 0, dy: 1 }
-          : { dx: 0, dy: -1 };
-    const target = { x: en.x + dx, y: en.y + dy };
+    // Walk as far as open in that direction from entrance
+    let tx = en.x;
+    let ty = en.y;
+    let steps = 0;
+    while (canStep(session.maze, tx, ty, dir, () => true) && steps < 20) {
+      const d = dir === 'east' ? { dx: 1, dy: 0 }
+        : dir === 'west' ? { dx: -1, dy: 0 }
+          : dir === 'south' ? { dx: 0, dy: 1 }
+            : { dx: 0, dy: -1 };
+      tx += d.dx;
+      ty += d.dy;
+      steps += 1;
+    }
+    assert(steps >= 1, 'corridor has at least one open cell');
+    const target = { x: tx, y: ty };
     const center = cellCenter(session.layout, target.x, target.y);
-    // Stage-space tap (camera 0 on easy full view)
     const stageTap = { x: center.x - session.camX, y: center.y - session.camY };
     session.update(1 / 60, { x: 0, y: 0, tap: stageTap });
     assert(session.tapGoal, 'tapGoal set after tap');
-    assertEq(session.tapGoal.x, target.x, 'tapGoal x');
-    assertEq(session.tapGoal.y, target.y, 'tapGoal y');
+    assertEq(session.tapGoal.x, target.x, 'tapGoal x is end of corridor');
+    assertEq(session.tapGoal.y, target.y, 'tapGoal y is end of corridor');
 
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 60 * 8; i++) {
       session.update(1 / 60, { x: 0, y: 0 });
       if (!session.tapGoal) break;
     }
     assertEq(session.tapGoal, null, 'tapGoal cleared on arrival');
     assertEq(session.guided.cellX, target.x, 'arrived at tapped cell X');
     assertEq(session.guided.cellY, target.y, 'arrived at tapped cell Y');
-    assertEq(session.guided.heading, null, 'stops after one square (no corridor coast)');
+    assertEq(session.guided.heading, null, 'stops at destination (no overshoot coast)');
 
-    // Holding still: should not keep walking past the tapped cell
     const parkedX = session.guided.cellX;
     const parkedY = session.guided.cellY;
     for (let i = 0; i < 30; i++) {
       session.update(1 / 60, { x: 0, y: 0 });
     }
-    assertEq(session.guided.cellX, parkedX, 'stays put after tap move');
-    assertEq(session.guided.cellY, parkedY, 'stays put after tap move Y');
+    assertEq(session.guided.cellX, parkedX, 'stays put after multi-cell tap');
+    assertEq(session.guided.cellY, parkedY, 'stays put after multi-cell tap Y');
   }
 }
 

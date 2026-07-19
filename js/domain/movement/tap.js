@@ -1,6 +1,6 @@
 /**
- * Tap-to-move: resolve a tapped cell into a single adjacent step.
- * Kids tap the next square; fat-finger taps farther along a corridor still move one step.
+ * Tap-to-move: resolve a tapped cell into a walk goal along an open straight corridor.
+ * Kids tap the end of a clear row/column run (1–N cells) and walk all the way there.
  */
 
 import { getCell, dirDelta } from '../maze/model.js';
@@ -49,10 +49,48 @@ export function dirTowardCell(fromX, fromY, toX, toY) {
 }
 
 /**
- * Resolve a maze-cell tap into the next step cell (one square only).
+ * Walk as far as an open straight corridor allows from the player toward (tapX,tapY).
+ * Only axis-aligned (same row or column). Stops at the tapped cell if fully open,
+ * or at the last reachable cell before a wall/gate.
+ *
+ * @param {Maze} maze
+ * @param {number} playerX
+ * @param {number} playerY
+ * @param {number} tapX
+ * @param {number} tapY
+ * @param {(cx: number, cy: number) => boolean} [canEnter]
+ * @returns {{ x: number, y: number, dir: Dir } | null}
+ */
+export function resolveStraightTap(maze, playerX, playerY, tapX, tapY, canEnter) {
+  const dx = tapX - playerX;
+  const dy = tapY - playerY;
+  if (dx === 0 && dy === 0) return null;
+  // Must be a straight line (row or column)
+  if (dx !== 0 && dy !== 0) return null;
+
+  /** @type {Dir} */
+  const dir = dx > 0 ? 'east' : dx < 0 ? 'west' : dy > 0 ? 'south' : 'north';
+  const { dx: sdx, dy: sdy } = dirDelta(dir);
+  const steps = Math.abs(dx) + Math.abs(dy);
+
+  let x = playerX;
+  let y = playerY;
+  let reached = 0;
+  for (let i = 0; i < steps; i++) {
+    if (!canStep(maze, x, y, dir, canEnter)) break;
+    x += sdx;
+    y += sdy;
+    reached += 1;
+  }
+  if (reached === 0) return null;
+  return { x, y, dir };
+}
+
+/**
+ * Resolve a maze-cell tap into a walk goal.
  * - Same cell → null
- * - Adjacent open → that cell
- * - Farther / diagonal → one step in the dominant open direction toward the tap
+ * - Straight open corridor (1–N cells) → go all the way to the tapped cell (or last open)
+ * - Off-axis (diagonal / fat finger) → one step in the dominant open direction, if any
  *
  * @param {Maze} maze
  * @param {number} playerX
@@ -65,23 +103,11 @@ export function dirTowardCell(fromX, fromY, toX, toY) {
 export function resolveTapStep(maze, playerX, playerY, tapX, tapY, canEnter) {
   if (tapX === playerX && tapY === playerY) return null;
 
-  // Exact adjacent open cell
-  const adjDx = tapX - playerX;
-  const adjDy = tapY - playerY;
-  if (Math.abs(adjDx) + Math.abs(adjDy) === 1) {
-    /** @type {Dir} */
-    let dir;
-    if (adjDx === 1) dir = 'east';
-    else if (adjDx === -1) dir = 'west';
-    else if (adjDy === 1) dir = 'south';
-    else dir = 'north';
-    if (canStep(maze, playerX, playerY, dir, canEnter)) {
-      return { x: tapX, y: tapY, dir };
-    }
-    return null;
-  }
+  // Preferred: full straight-line run to the tapped square
+  const straight = resolveStraightTap(maze, playerX, playerY, tapX, tapY, canEnter);
+  if (straight) return straight;
 
-  // Directional assist: one step toward the tapped area if that door is open
+  // Off-axis fat finger: one step toward the tap if that door is open
   const dir = dirTowardCell(playerX, playerY, tapX, tapY);
   if (!dir) return null;
   if (!canStep(maze, playerX, playerY, dir, canEnter)) return null;
