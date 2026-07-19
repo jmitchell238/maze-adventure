@@ -1,5 +1,5 @@
 // Bump with GAME_VERSION in js/config/index.js (MAJOR.MINOR.PATCH).
-const CACHE = 'maze-adventure-1.2.000';
+const CACHE = 'maze-adventure-1.2.003';
 
 const ASSETS = [
   './',

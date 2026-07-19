@@ -5,7 +5,7 @@
 
 // ---- Version (MAJOR.MINOR.PATCH) --------------------------------------------
 // Keep CACHE in sw.js in sync when PWA ships: 'maze-adventure-' + GAME_VERSION
-export const GAME_VERSION = '1.2.000';
+export const GAME_VERSION = '1.2.003';
 export const GAME_VERSION_LABEL = 'v' + GAME_VERSION;
 export const GAME_NAME = 'Maze Adventure';
 
@@ -23,7 +23,8 @@ export const GEN = {
 
 /** Movement (Milestone 3+; stored here for single config home) */
 export const MOVE = {
-  freeSpeed: 110,
-  guidedSpeed: 130,
+  freeSpeed: 120,
+  /** Slightly snappy so kids feel progress on short phone swipes */
+  guidedSpeed: 160,
   playerRadius: 10,
 };

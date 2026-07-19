@@ -36,7 +36,9 @@ let last = performance.now();
 /** @type {'quick'|'daily'} */
 let pendingMode = 'quick';
 
-const input = createInput(stage, cv, {});
+const input = createInput(stage, cv, {
+  isPlay: () => session.screen === 'play',
+});
 
 function setScreen(name) {
   document.querySelectorAll('.screen').forEach((el) => {

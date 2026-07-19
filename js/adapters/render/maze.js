@@ -543,7 +543,9 @@ export function drawPlayer(ctx, player, layout, theme, radius, time, moving, red
  * @param {{ active: boolean, dx: number, dy: number }} stick
  */
 export function drawStick(ctx, stick) {
-  const { x, y } = STICK_BASE;
+  // Follow floating origin while active; rest at default base when idle
+  const x = stick.active && Number.isFinite(stick.ox) ? stick.ox : STICK_BASE.x;
+  const y = stick.active && Number.isFinite(stick.oy) ? stick.oy : STICK_BASE.y;
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
   ctx.arc(x, y, STICK_R + 4, 0, Math.PI * 2);
@@ -555,8 +557,8 @@ export function drawStick(ctx, stick) {
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 2.5;
   ctx.stroke();
-  const kx = x + stick.dx * STICK_R * 0.65;
-  const ky = y + stick.dy * STICK_R * 0.65;
+  const kx = x + (stick.dx || 0) * STICK_R * 0.65;
+  const ky = y + (stick.dy || 0) * STICK_R * 0.65;
   const kg = ctx.createRadialGradient(kx - 4, ky - 4, 2, kx, ky, STICK_R * 0.45);
   kg.addColorStop(0, stick.active ? '#b8ffd0' : '#ffffff');
   kg.addColorStop(1, stick.active ? '#4fd68a' : 'rgba(255,255,255,0.5)');

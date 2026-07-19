@@ -405,6 +405,15 @@ export class GameSession {
       else if (g.heading === 'west') this.player.facing = 'west';
       else if (g.heading === 'north') this.player.facing = 'north';
       else if (g.heading === 'south') this.player.facing = 'south';
+      else if (Math.hypot(input.x, input.y) > 0.18) {
+        // Face the stick even when blocked so kids see their intent
+        if (Math.abs(input.x) >= Math.abs(input.y)) {
+          this.player.facing = input.x >= 0 ? 'east' : 'west';
+        } else {
+          this.player.facing = input.y >= 0 ? 'south' : 'north';
+        }
+        if (!moved && this.bumpCooldown <= 0) blocked = true;
+      }
     } else {
       const vel = { x: input.x * speed, y: input.y * speed };
       const next = integrateFreeMove(

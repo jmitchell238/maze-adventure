@@ -76,6 +76,9 @@ html, body {
 
 .screen[data-screen="menu"],
 .screen[data-screen="difficulty"],
+.screen[data-screen="adventure"],
+.screen[data-screen="freeplay"],
+.screen[data-screen="settings"],
 .screen[data-screen="win"],
 .screen[data-screen="pause"] {
   display: flex;

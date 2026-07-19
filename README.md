@@ -4,7 +4,7 @@ Colorful **procedural toy mazes** for kids (ages 4–6 first) and challenge seek
 
 Part of the **Arcade Hub** library — static PWA on GitHub Pages, linked from the hub catalog.
 
-**Version:** `1.2.000` · **Status:** Shipped + polish (Milestones 1–7, ship-ready)
+**Version:** `1.2.003` · **Status:** Shipped + polish (Milestones 1–7, ship-ready)
 
 See **[PARENTS.md](./PARENTS.md)** and **[DEPLOY.md](./DEPLOY.md)**.
 

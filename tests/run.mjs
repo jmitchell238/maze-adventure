@@ -414,6 +414,17 @@ section('PWA shell + version sync');
   assert(html.includes('js/app/main.js'), 'main script');
   assert(html.includes('data-screen="menu"'), 'menu screen');
   assert(html.includes('data-screen="win"'), 'win screen');
+  assert(html.includes('data-screen="adventure"'), 'adventure screen');
+
+  // Adventure/freeplay/settings must sit above the canvas (z-index) or they look like a
+  // "loading circles" screen with no UI (menu decor draws under an invisible overlay).
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  for (const screen of ['adventure', 'freeplay', 'settings']) {
+    assert(
+      css.includes(`data-screen="${screen}"`),
+      `CSS styles data-screen=${screen} (stacking/pointer-events)`,
+    );
+  }
 }
 
 section('themes');
@@ -443,30 +454,165 @@ section('movement free + guided');
   const boundsRight = layout.originX + maze.cols * layout.cellSize;
   assert(fly.x < boundsRight, 'clamped inside maze');
 
-  const g0 = createGuidedState(maze, layout, maze.entrance.x, maze.entrance.y);
   assert(openDirs(maze, maze.entrance.x, maze.entrance.y).length >= 1, 'entrance open');
   assertEq(axisToDir(0, 0), null, 'neutral axis');
   assertEq(axisToDir(1, 0), 'east', 'east axis');
-  // Step guided along a solution direction if possible
-  const path = maze.solution;
-  if (path.length >= 2) {
-    const a = path[0];
-    const b = path[1];
-    const ax = a % maze.cols;
-    const ay = (a / maze.cols) | 0;
-    const bx = b % maze.cols;
-    const by = (b / maze.cols) | 0;
-    const dx = bx - ax;
-    const dy = by - ay;
-    const input = { x: dx, y: dy };
-    let g = createGuidedState(maze, layout, ax, ay);
-    for (let i = 0; i < 120; i++) {
-      g = integrateGuidedMove(maze, layout, g, input, 200, 0.016);
+}
+
+/**
+ * Reference implementation of the PRE-FIX guided step that snapped to cell center
+ * whenever within a large radius. Proves why phones got "looks the way / won't walk".
+ *
+ * Invariant it violates: hold open dir for ≥ (cellSize/speed)*1.5 seconds → leave cell.
+ */
+function buggyGuidedStepSnapBack(state, targetX, targetY, speed, dt, cellSize) {
+  let { x, y, heading } = state;
+  const step = speed * dt;
+  const centerX = state.centerX;
+  const centerY = state.centerY;
+  // THE BUG: arrival radius larger than one frame of motion at 60–240Hz
+  const nearEps = Math.max(2, cellSize * 0.12);
+  const dCenter = Math.hypot(x - centerX, y - centerY);
+  if (dCenter < nearEps) {
+    x = centerX;
+    y = centerY;
+    // re-affirm heading (as real code did) but position is reset every frame
+  }
+  if (!heading) return { ...state, x, y, moved: false };
+  const ddx = targetX - x;
+  const ddy = targetY - y;
+  const len = Math.hypot(ddx, ddy);
+  if (len <= step) {
+    return { ...state, x: targetX, y: targetY, cellArrived: true, moved: true };
+  }
+  x += (ddx / len) * step;
+  y += (ddy / len) * step;
+  return { ...state, x, y, moved: true };
+}
+
+section('guided stuck regression (proven bug + fix)');
+{
+  const { MOVE } = await import(js('js/config/index.js'));
+  const speed = MOVE.guidedSpeed;
+  const cellSize = 59; // typical easy layout on 390×700
+  const centerX = 0;
+  const centerY = 0;
+  const targetX = cellSize; // one cell east
+  const targetY = 0;
+
+  // --- A) Prove the old algorithm fails the leave-cell invariant at common Hz ---
+  for (const hz of [60, 90, 120, 144, 240]) {
+    let st = {
+      x: centerX, y: centerY, centerX, centerY, heading: 'east',
+    };
+    const frames = Math.ceil(hz * (cellSize / speed) * 2);
+    for (let i = 0; i < frames; i++) {
+      st = buggyGuidedStepSnapBack(st, targetX, targetY, speed, 1 / hz, cellSize);
+      if (st.cellArrived) break;
     }
-    const cell = worldToCell(layout, maze, g.x, g.y);
+    const left = Math.hypot(st.x - centerX, st.y - centerY) > cellSize * 0.5;
+    // Documented failure: at every common phone refresh this stays stuck.
+    assert(!left, `BUG REF: old snap-back stays stuck at ${hz}Hz (proves the defect)`);
+  }
+
+  // --- B) Current integrateGuidedMove must leave the start cell at every Hz ---
+  const maze = generateMaze('easy', 'guided-regress-seed');
+  const layout = layoutMazeToView(maze, W, H, 18);
+  const sol = maze.solution;
+  assert(sol.length >= 2, 'solution has a first step');
+  const a = sol[0];
+  const b = sol[1];
+  const ax = a % maze.cols;
+  const ay = (a / maze.cols) | 0;
+  const bx = b % maze.cols;
+  const by = (b / maze.cols) | 0;
+  const input = { x: bx - ax, y: by - ay };
+  assert(Math.abs(input.x) + Math.abs(input.y) === 1, 'first step is cardinal');
+
+  for (const hz of [30, 60, 90, 120, 144, 240]) {
+    let g = createGuidedState(maze, layout, ax, ay);
+    const start = { x: g.x, y: g.y, cx: g.cellX, cy: g.cellY };
+    // time to cross ~1.25 cells with margin
+    const frames = Math.ceil(hz * (layout.cellSize / speed) * 1.5 + hz * 0.25);
+    let maxDist = 0;
+    for (let i = 0; i < frames; i++) {
+      g = integrateGuidedMove(maze, layout, g, input, speed, 1 / hz);
+      maxDist = Math.max(maxDist, Math.hypot(g.x - start.x, g.y - start.y));
+    }
+    const leftStart = g.cellX !== start.cx || g.cellY !== start.cy;
+    assert(leftStart, `fix: leaves start cell at ${hz}Hz`);
+    assert(maxDist > layout.cellSize * 0.5, `fix: travels >½ cell at ${hz}Hz (got ${maxDist.toFixed(1)})`);
+  }
+
+  // --- C) Stick blips to neutral mid-leg must NOT cancel (phone touch jitter) ---
+  {
+    let g = createGuidedState(maze, layout, ax, ay);
+    const start = { cx: g.cellX, cy: g.cellY };
+    const c0 = cellCenter(layout, start.cx, start.cy);
+    // Start moving
+    for (let i = 0; i < 10; i++) {
+      g = integrateGuidedMove(maze, layout, g, input, speed, 1 / 60);
+    }
+    assert(g.heading != null, 'has heading after start');
+    assert(Math.hypot(g.x - c0.x, g.y - c0.y) > 2, 'left exact center after start frames');
+    // 20 frames of neutral stick (finger jitter / partial lift)
+    for (let i = 0; i < 20; i++) {
+      g = integrateGuidedMove(maze, layout, g, { x: 0, y: 0 }, speed, 1 / 60);
+    }
+    // Must not be idle snapped back at start with no heading
+    const idleAtStart = g.cellX === start.cx && g.cellY === start.cy
+      && g.heading == null
+      && Math.hypot(g.x - c0.x, g.y - c0.y) < 2;
+    assert(!idleAtStart, 'neutral blip mid-leg does not cancel back to idle start');
+    // Continue with input — must leave start within another half-second
+    for (let i = 0; i < 40; i++) {
+      g = integrateGuidedMove(maze, layout, g, input, speed, 1 / 60);
+    }
     assert(
-      (cell.x === bx && cell.y === by) || (cell.x === ax && cell.y === ay) || g.moved,
-      'guided advances toward next cell',
+      g.cellX !== start.cx || g.cellY !== start.cy,
+      'after blip, holding again still reaches next cell',
+    );
+  }
+
+  // --- D) GameSession easy (guided default): hold open dir → move ≥1 cell ---
+  {
+    const save = createMemorySave();
+    const audio = createSilentAudio();
+    const session = new GameSession({ audio, save });
+    for (const hz of [60, 120, 240]) {
+      session.startQuick('easy', 'session-move-regress');
+      assertEq(session.movementMode, 'guided', 'easy uses guided');
+      const opens = openDirs(session.maze, session.maze.entrance.x, session.maze.entrance.y);
+      assert(opens.length >= 1, 'session entrance has an open dir');
+      const dir = opens[0];
+      const stick = dir === 'east' ? { x: 1, y: 0 }
+        : dir === 'west' ? { x: -1, y: 0 }
+          : dir === 'south' ? { x: 0, y: 1 }
+            : { x: 0, y: -1 };
+      const en = cellCenter(session.layout, session.maze.entrance.x, session.maze.entrance.y);
+      for (let i = 0; i < Math.ceil(hz * 1.5); i++) {
+        session.update(1 / hz, stick);
+      }
+      const left = session.guided.cellX !== session.maze.entrance.x
+        || session.guided.cellY !== session.maze.entrance.y;
+      const d2 = Math.hypot(session.player.x - en.x, session.player.y - en.y);
+      assert(left, `GameSession leaves entrance at ${hz}Hz holding ${dir}`);
+      assert(d2 > session.layout.cellSize * 0.5, `GameSession traveled at ${hz}Hz`);
+    }
+  }
+
+  // --- E) CSS adventure overlay regression (circles-only screen) ---
+  {
+    const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+    // The interactive-screen rule must list adventure (not only menu/difficulty)
+    const blockMatch = css.match(
+      /\.screen\[data-screen="menu"\][\s\S]*?pointer-events:\s*auto/,
+    );
+    assert(!!blockMatch, 'found interactive screen CSS block');
+    assert(
+      blockMatch[0].includes('adventure') && blockMatch[0].includes('freeplay')
+        && blockMatch[0].includes('settings'),
+      'adventure/freeplay/settings share menu stacking + pointer-events',
     );
   }
 }

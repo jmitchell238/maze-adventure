@@ -11,7 +11,12 @@ export const STICK_BASE = { x: 72, y: H - 72 };
 /**
  * @param {HTMLElement} stageEl
  * @param {HTMLCanvasElement} canvasEl
- * @param {{ onPause?: () => void, onHint?: () => void, onRestart?: () => void }} [hooks]
+ * @param {{
+ *   onPause?: () => void,
+ *   onHint?: () => void,
+ *   onRestart?: () => void,
+ *   isPlay?: () => boolean,
+ * }} [hooks]
  */
 export function createInput(stageEl, canvasEl, hooks = {}) {
   const stick = {
@@ -48,6 +53,8 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     stick.dx = 0;
     stick.dy = 0;
     stick.id = null;
+    stick.ox = STICK_BASE.x;
+    stick.oy = STICK_BASE.y;
   }
 
   function updateStick(sx, sy) {
@@ -124,7 +131,7 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     const g = gamepadState();
     let x = k.x;
     let y = k.y;
-    if (stick.active && (Math.abs(stick.dx) > 0.08 || Math.abs(stick.dy) > 0.08)) {
+    if (stick.active && (Math.abs(stick.dx) > 0.05 || Math.abs(stick.dy) > 0.05)) {
       x = clamp(stick.dx + k.x * 0.35, -1, 1);
       y = clamp(stick.dy + k.y * 0.35, -1, 1);
     }
@@ -186,20 +193,46 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     keys[e.key] = false;
   }
 
+  function clampStickOrigin(sx, sy) {
+    // Keep floating stick fully on-screen
+    return {
+      x: clamp(sx, STICK_R + 10, W - STICK_R - 10),
+      y: clamp(sy, STICK_R + 10, H - STICK_R - 10),
+    };
+  }
+
+  const ptrOpts = { passive: false };
+
   function pointerDown(e) {
-    if (e.target && e.target.closest && e.target.closest('button, a, input')) return;
+    // Never steal menu / form / scroll interactions
+    if (e.target && e.target.closest &&
+        e.target.closest('button, a, input, label, .menu-card, .screen, .adv-list, .how')) {
+      return;
+    }
+    if (hooks.isPlay && !hooks.isPlay()) return;
     const p = clientToStage(e.clientX, e.clientY);
     stick.active = true;
     stick.id = e.pointerId;
-    stick.ox = STICK_BASE.x;
-    stick.oy = STICK_BASE.y;
-    updateStick(p.x, p.y);
-    try { canvasEl.setPointerCapture(e.pointerId); } catch { /* */ }
+    // Floating stick: anchor under the finger so drag always starts neutral
+    // (fixed base made phone play feel broken when kids touch the maze itself).
+    const origin = clampStickOrigin(p.x, p.y);
+    stick.ox = origin.x;
+    stick.oy = origin.y;
+    // Start neutral — direction comes from the drag, not the touch point
+    stick.dx = 0;
+    stick.dy = 0;
+    try {
+      (stageEl || canvasEl).setPointerCapture(e.pointerId);
+    } catch { /* */ }
     e.preventDefault();
   }
 
   function pointerMove(e) {
     if (!stick.active || (stick.id != null && e.pointerId !== stick.id)) return;
+    if (hooks.isPlay && !hooks.isPlay()) {
+      resetStick();
+      return;
+    }
     const p = clientToStage(e.clientX, e.clientY);
     updateStick(p.x, p.y);
     e.preventDefault();
@@ -213,19 +246,24 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
   function bind() {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    canvasEl.addEventListener('pointerdown', pointerDown);
-    canvasEl.addEventListener('pointermove', pointerMove);
-    canvasEl.addEventListener('pointerup', pointerUp);
-    canvasEl.addEventListener('pointercancel', pointerUp);
+    // Prefer the stage so letterbox / chrome edge cases still get moves on phones
+    const el = stageEl || canvasEl;
+    el.addEventListener('pointerdown', pointerDown, ptrOpts);
+    el.addEventListener('pointermove', pointerMove, ptrOpts);
+    el.addEventListener('pointerup', pointerUp, ptrOpts);
+    el.addEventListener('pointercancel', pointerUp, ptrOpts);
+    el.addEventListener('lostpointercapture', pointerUp, ptrOpts);
   }
 
   function unbind() {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
-    canvasEl.removeEventListener('pointerdown', pointerDown);
-    canvasEl.removeEventListener('pointermove', pointerMove);
-    canvasEl.removeEventListener('pointerup', pointerUp);
-    canvasEl.removeEventListener('pointercancel', pointerUp);
+    const el = stageEl || canvasEl;
+    el.removeEventListener('pointerdown', pointerDown, ptrOpts);
+    el.removeEventListener('pointermove', pointerMove, ptrOpts);
+    el.removeEventListener('pointerup', pointerUp, ptrOpts);
+    el.removeEventListener('pointercancel', pointerUp, ptrOpts);
+    el.removeEventListener('lostpointercapture', pointerUp, ptrOpts);
   }
 
   bind();
