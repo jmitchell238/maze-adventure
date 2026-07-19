@@ -92,9 +92,10 @@ export function drawSession(ctx, session, inputPoll) {
 
   ctx.restore();
 
-  // Screen-space HUD + stick
+  // Screen-space HUD + stick (stick only while dragging — default move is tap)
   if (session.screen === 'play' || session.screen === 'pause') {
-    drawStick(ctx, inputPoll.stick || { active: false, dx: 0, dy: 0 });
+    const stick = inputPoll.stick || { active: false, dx: 0, dy: 0 };
+    if (stick.active) drawStick(ctx, stick);
     let right = '';
     if (session.screen === 'pause') right = 'PAUSED';
     else if (session.hasGate() && !session.gateOpen) right = '⏻ open gate';

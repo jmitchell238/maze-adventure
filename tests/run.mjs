@@ -385,6 +385,9 @@ const { layoutMazeToView, integrateFreeMove, cellCenter, worldToCell } =
 const {
   createGuidedState, integrateGuidedMove, openDirs, axisToDir,
 } = await import(js('js/domain/movement/guided.js'));
+const {
+  resolveTapStep, dirTowardCell, canStep, dirToAxis,
+} = await import(js('js/domain/movement/tap.js'));
 const { createMemorySave } = await import(js('js/adapters/save.js'));
 const { createSilentAudio } = await import(js('js/adapters/audio.js'));
 const { getTheme, themeForRun } = await import(js('js/domain/themes.js'));
@@ -614,6 +617,88 @@ section('guided stuck regression (proven bug + fix)');
         && blockMatch[0].includes('settings'),
       'adventure/freeplay/settings share menu stacking + pointer-events',
     );
+  }
+}
+
+section('tap-to-move (default touch)');
+{
+  assert(exists('js/domain/movement/tap.js'), 'tap.js present');
+  assert(dirToAxis('east').x === 1 && dirToAxis('west').x === -1, 'dirToAxis');
+  assertEq(dirTowardCell(0, 0, 3, 0), 'east', 'dirToward east');
+  assertEq(dirTowardCell(0, 0, 0, 2), 'south', 'dirToward south');
+  assertEq(dirTowardCell(1, 1, 1, 1), null, 'dirToward same');
+
+  // Tiny open corridor: (0,0)-(1,0)-(2,0) carved east-west
+  const maze = {
+    rows: 1,
+    cols: 3,
+    cells: [
+      { x: 0, y: 0, north: true, south: true, east: false, west: true, open: true },
+      { x: 1, y: 0, north: true, south: true, east: false, west: false, open: true },
+      { x: 2, y: 0, north: true, south: true, east: true, west: false, open: true },
+    ],
+    entrance: { x: 0, y: 0 },
+    exit: { x: 2, y: 0 },
+    collectibles: [],
+    seed: 'tap',
+    difficultyId: 'easy',
+    solution: [0, 1, 2],
+    metrics: {},
+  };
+
+  assert(canStep(maze, 0, 0, 'east'), 'can step east from start');
+  assert(!canStep(maze, 0, 0, 'west'), 'cannot step west into wall');
+  assert(!canStep(maze, 0, 0, 'north'), 'cannot step north into wall');
+
+  const adj = resolveTapStep(maze, 0, 0, 1, 0);
+  assert(adj && adj.x === 1 && adj.y === 0 && adj.dir === 'east', 'adjacent open tap');
+  assertEq(resolveTapStep(maze, 0, 0, 0, 0), null, 'same cell tap is null');
+  assertEq(resolveTapStep(maze, 0, 0, 0, 1), null, 'blocked direction null');
+
+  // Fat finger: tap two cells away → still one step toward it
+  const far = resolveTapStep(maze, 0, 0, 2, 0);
+  assert(far && far.x === 1 && far.y === 0 && far.dir === 'east', 'far tap walks one step');
+
+  // GameSession: stage tap moves one guided cell then stops
+  {
+    const save = createMemorySave();
+    const audio = createSilentAudio();
+    const session = new GameSession({ audio, save });
+    session.startQuick('easy', 'tap-move-seed');
+    const en = session.maze.entrance;
+    const opens = openDirs(session.maze, en.x, en.y);
+    assert(opens.length >= 1, 'entrance open for tap test');
+    const dir = opens[0];
+    const { dx, dy } = dir === 'east' ? { dx: 1, dy: 0 }
+      : dir === 'west' ? { dx: -1, dy: 0 }
+        : dir === 'south' ? { dx: 0, dy: 1 }
+          : { dx: 0, dy: -1 };
+    const target = { x: en.x + dx, y: en.y + dy };
+    const center = cellCenter(session.layout, target.x, target.y);
+    // Stage-space tap (camera 0 on easy full view)
+    const stageTap = { x: center.x - session.camX, y: center.y - session.camY };
+    session.update(1 / 60, { x: 0, y: 0, tap: stageTap });
+    assert(session.tapGoal, 'tapGoal set after tap');
+    assertEq(session.tapGoal.x, target.x, 'tapGoal x');
+    assertEq(session.tapGoal.y, target.y, 'tapGoal y');
+
+    for (let i = 0; i < 120; i++) {
+      session.update(1 / 60, { x: 0, y: 0 });
+      if (!session.tapGoal) break;
+    }
+    assertEq(session.tapGoal, null, 'tapGoal cleared on arrival');
+    assertEq(session.guided.cellX, target.x, 'arrived at tapped cell X');
+    assertEq(session.guided.cellY, target.y, 'arrived at tapped cell Y');
+    assertEq(session.guided.heading, null, 'stops after one square (no corridor coast)');
+
+    // Holding still: should not keep walking past the tapped cell
+    const parkedX = session.guided.cellX;
+    const parkedY = session.guided.cellY;
+    for (let i = 0; i < 30; i++) {
+      session.update(1 / 60, { x: 0, y: 0 });
+    }
+    assertEq(session.guided.cellX, parkedX, 'stays put after tap move');
+    assertEq(session.guided.cellY, parkedY, 'stays put after tap move Y');
   }
 }
 

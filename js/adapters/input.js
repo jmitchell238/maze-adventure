@@ -1,5 +1,7 @@
 /**
- * Keyboard + large virtual stick + gamepad for maze movement.
+ * Keyboard + tap-to-move + optional virtual stick (drag) + gamepad for maze movement.
+ *
+ * Default touch: short press = tap a cell (stage coords). Drag past threshold = stick.
  */
 
 import { W, H } from '../config/index.js';
@@ -7,6 +9,9 @@ import { clamp } from '../core/math.js';
 
 export const STICK_R = 48;
 export const STICK_BASE = { x: 72, y: H - 72 };
+
+/** Pixels of stage movement before a press becomes a stick drag. */
+const DRAG_THRESHOLD = 22;
 
 /**
  * @param {HTMLElement} stageEl
@@ -27,6 +32,18 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     ox: STICK_BASE.x,
     oy: STICK_BASE.y,
   };
+  /** Pending stage-space tap (consumed on poll). */
+  let pendingTap = /** @type {{ x: number, y: number } | null} */ (null);
+  /** Active pointer press that may resolve as tap or stick. */
+  let press = /** @type {{
+   *   id: number,
+   *   startX: number,
+   *   startY: number,
+   *   x: number,
+   *   y: number,
+   *   isDrag: boolean,
+   * } | null} */ (null);
+
   /** @type {Record<string, boolean>} */
   const keys = Object.create(null);
   let pauseQueued = false;
@@ -55,6 +72,10 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     stick.id = null;
     stick.ox = STICK_BASE.x;
     stick.oy = STICK_BASE.y;
+  }
+
+  function clearPress() {
+    press = null;
   }
 
   function updateStick(sx, sy) {
@@ -158,6 +179,9 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     if (g.restart && !prevPad.restart) restartQueued = true;
     prevPad = { pause: g.pause, hint: g.hint, restart: g.restart };
 
+    const tap = pendingTap;
+    pendingTap = null;
+
     const out = {
       x: a.x,
       y: a.y,
@@ -165,6 +189,8 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
       hint: hintQueued,
       restart: restartQueued,
       stick: { ...stick },
+      /** Stage-space tap this frame, or null */
+      tap,
     };
     pauseQueued = false;
     hintQueued = false;
@@ -201,6 +227,15 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
     };
   }
 
+  function beginStickFromPress(p) {
+    stick.active = true;
+    stick.id = p.id;
+    const origin = clampStickOrigin(p.startX, p.startY);
+    stick.ox = origin.x;
+    stick.oy = origin.y;
+    updateStick(p.x, p.y);
+  }
+
   const ptrOpts = { passive: false };
 
   function pointerDown(e) {
@@ -210,17 +245,18 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
       return;
     }
     if (hooks.isPlay && !hooks.isPlay()) return;
+    // Only one primary press
+    if (press || stick.active) return;
+
     const p = clientToStage(e.clientX, e.clientY);
-    stick.active = true;
-    stick.id = e.pointerId;
-    // Floating stick: anchor under the finger so drag always starts neutral
-    // (fixed base made phone play feel broken when kids touch the maze itself).
-    const origin = clampStickOrigin(p.x, p.y);
-    stick.ox = origin.x;
-    stick.oy = origin.y;
-    // Start neutral — direction comes from the drag, not the touch point
-    stick.dx = 0;
-    stick.dy = 0;
+    press = {
+      id: e.pointerId,
+      startX: p.x,
+      startY: p.y,
+      x: p.x,
+      y: p.y,
+      isDrag: false,
+    };
     try {
       (stageEl || canvasEl).setPointerCapture(e.pointerId);
     } catch { /* */ }
@@ -228,18 +264,47 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
   }
 
   function pointerMove(e) {
-    if (!stick.active || (stick.id != null && e.pointerId !== stick.id)) return;
+    if (!press || e.pointerId !== press.id) {
+      if (!stick.active || (stick.id != null && e.pointerId !== stick.id)) return;
+      if (hooks.isPlay && !hooks.isPlay()) {
+        resetStick();
+        return;
+      }
+      const p = clientToStage(e.clientX, e.clientY);
+      updateStick(p.x, p.y);
+      e.preventDefault();
+      return;
+    }
     if (hooks.isPlay && !hooks.isPlay()) {
+      clearPress();
       resetStick();
       return;
     }
     const p = clientToStage(e.clientX, e.clientY);
-    updateStick(p.x, p.y);
+    press.x = p.x;
+    press.y = p.y;
+    const dist = Math.hypot(p.x - press.startX, p.y - press.startY);
+    if (!press.isDrag && dist >= DRAG_THRESHOLD) {
+      press.isDrag = true;
+      beginStickFromPress(press);
+    } else if (press.isDrag) {
+      updateStick(p.x, p.y);
+    }
     e.preventDefault();
   }
 
   function pointerUp(e) {
+    if (press && e.pointerId === press.id) {
+      if (!press.isDrag) {
+        // Tap: use lift position (or start — nearly same)
+        pendingTap = { x: press.x, y: press.y };
+      }
+      clearPress();
+      resetStick();
+      return;
+    }
     if (stick.id != null && e.pointerId !== stick.id) return;
+    clearPress();
     resetStick();
   }
 
@@ -270,7 +335,11 @@ export function createInput(stageEl, canvasEl, hooks = {}) {
 
   return {
     poll,
-    resetStick,
+    resetStick: () => {
+      resetStick();
+      clearPress();
+      pendingTap = null;
+    },
     unbind,
     STICK_BASE,
     STICK_R,

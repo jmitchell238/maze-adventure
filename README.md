@@ -31,8 +31,9 @@ python3 -m http.server 8080
 
 | Input | Action |
 |-------|--------|
+| Tap next square | Move one cell (default on touch) |
 | Arrow keys / WASD | Move |
-| Touch / drag | Virtual stick |
+| Touch drag | Virtual stick (optional) |
 | Esc | Pause |
 | H / ? | Hint |
 | R / ↻ | Restart |

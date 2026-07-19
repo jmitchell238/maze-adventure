@@ -104,8 +104,8 @@ Difficulty is **measured** (see MAZE_GENERATION.md), not only grid size.
 
 ### Touch / tablet
 
-- **Large virtual joystick** (bottom-left) — primary  
-- Optional: **tap adjacent open cell** as secondary assist on Easy (Milestone 4)  
+- **Tap adjacent open cell** — primary (default; most natural for young kids)  
+- **Drag** for virtual joystick — optional secondary  
 - **No tiny D-pads**  
 
 ### Rules

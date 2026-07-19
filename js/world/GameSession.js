@@ -16,11 +16,12 @@ import {
   cellCenter, integrateFreeMove, layoutMazeToView, worldToCell,
 } from '../domain/movement/free.js';
 import {
-  createGuidedState, integrateGuidedMove,
+  createGuidedState, integrateGuidedMove, GUIDED_CENTER_EPS,
 } from '../domain/movement/guided.js';
 import {
   isDeadEndCell, hintTrail, hintDirection,
 } from '../domain/movement/assist.js';
+import { resolveTapStep, dirToAxis } from '../domain/movement/tap.js';
 import { cellIndex } from '../domain/maze/model.js';
 import { dist, clamp } from '../core/math.js';
 import { makeDailySeed, dateKey } from '../domain/modes.js';
@@ -80,6 +81,8 @@ export class GameSession {
     /** Gate open after switch stepped on. */
     this.gateOpen = true;
     this.justOpenedGate = false;
+    /** @type {{ x: number, y: number, dir: import('../domain/maze/model.js').Dir } | null} */
+    this.tapGoal = null;
   }
 
   get reducedMotion() {
@@ -274,6 +277,7 @@ export class GameSession {
     this.justOpenedGate = false;
     // Closed only if maze has a gate
     this.gateOpen = !(this.maze.gatePos && this.maze.switchPos);
+    this.tapGoal = null;
     this.camX = 0;
     this.camY = 0;
     this._updateCamera(1);
@@ -355,7 +359,11 @@ export class GameSession {
 
   /**
    * @param {number} dt
-   * @param {{ x: number, y: number, pause?: boolean, hint?: boolean, restart?: boolean }} input
+   * @param {{
+   *   x: number, y: number,
+   *   pause?: boolean, hint?: boolean, restart?: boolean,
+   *   tap?: { x: number, y: number } | null,
+   * }} input
    */
   update(dt, input) {
     this.time += dt;
@@ -393,9 +401,27 @@ export class GameSession {
     const prevX = this.player.x;
     const prevY = this.player.y;
 
+    // Stick/keys/gamepad take priority and cancel a pending tap goal
+    const stickMag = Math.hypot(input.x, input.y);
+    if (stickMag > 0.18) {
+      this.tapGoal = null;
+    }
+
+    // Fresh screen-space tap → one step toward that maze cell
+    if (input.tap && stickMag <= 0.18) {
+      this._applyTap(input.tap, canEnter);
+    }
+
+    // While walking to a tapped square, feed that direction as axis input
+    let moveInput = { x: input.x, y: input.y };
+    if (this.tapGoal && stickMag <= 0.18) {
+      const axis = dirToAxis(this.tapGoal.dir);
+      moveInput = { x: axis.x, y: axis.y };
+    }
+
     if (this.movementMode === 'guided') {
       const g = integrateGuidedMove(
-        this.maze, this.layout, this.guided, input, speed, dt, canEnter,
+        this.maze, this.layout, this.guided, moveInput, speed, dt, canEnter,
       );
       this.guided = g;
       this.player.x = g.x;
@@ -405,27 +431,29 @@ export class GameSession {
       else if (g.heading === 'west') this.player.facing = 'west';
       else if (g.heading === 'north') this.player.facing = 'north';
       else if (g.heading === 'south') this.player.facing = 'south';
-      else if (Math.hypot(input.x, input.y) > 0.18) {
+      else if (Math.hypot(moveInput.x, moveInput.y) > 0.18) {
         // Face the stick even when blocked so kids see their intent
-        if (Math.abs(input.x) >= Math.abs(input.y)) {
-          this.player.facing = input.x >= 0 ? 'east' : 'west';
+        if (Math.abs(moveInput.x) >= Math.abs(moveInput.y)) {
+          this.player.facing = moveInput.x >= 0 ? 'east' : 'west';
         } else {
-          this.player.facing = input.y >= 0 ? 'south' : 'north';
+          this.player.facing = moveInput.y >= 0 ? 'south' : 'north';
         }
         if (!moved && this.bumpCooldown <= 0) blocked = true;
       }
+      // Stop on the tapped square (don't coast past it in corridors)
+      this._settleTapGoal();
     } else {
-      const vel = { x: input.x * speed, y: input.y * speed };
+      const vel = { x: moveInput.x * speed, y: moveInput.y * speed };
       const next = integrateFreeMove(
         this.maze, this.layout, this.player, vel, dt, this.player.radius,
       );
-      if (Math.hypot(input.x, input.y) > 0.1) {
+      if (Math.hypot(moveInput.x, moveInput.y) > 0.1) {
         moved = Math.hypot(next.x - this.player.x, next.y - this.player.y) > 0.15;
         blocked = next.blocked && !moved;
-        if (Math.abs(input.x) >= Math.abs(input.y)) {
-          this.player.facing = input.x >= 0 ? 'east' : 'west';
+        if (Math.abs(moveInput.x) >= Math.abs(moveInput.y)) {
+          this.player.facing = moveInput.x >= 0 ? 'east' : 'west';
         } else {
-          this.player.facing = input.y >= 0 ? 'south' : 'north';
+          this.player.facing = moveInput.y >= 0 ? 'south' : 'north';
         }
       }
       // Gate cell block for free movement
@@ -443,6 +471,7 @@ export class GameSession {
       this.guided = createGuidedState(this.maze, this.layout, cell.x, cell.y);
       this.guided.x = this.player.x;
       this.guided.y = this.player.y;
+      this._settleTapGoal();
     }
 
     this.moving = moved;
@@ -463,7 +492,7 @@ export class GameSession {
     }
 
     const profile = this.activeProfile || getProfile(this.difficultyId);
-    const inputMag = Math.hypot(input.x, input.y);
+    const inputMag = Math.hypot(moveInput.x, moveInput.y);
     if (profile.id === 'easy' || profile.id === 'medium' || profile.guidedMovement) {
       if (isDeadEndCell(this.maze, pCell.x, pCell.y)) {
         this.stuckTimer += dt;
@@ -500,6 +529,66 @@ export class GameSession {
     }
 
     return null;
+  }
+
+  /**
+   * Map a stage-space tap to a one-cell walk goal.
+   * @param {{ x: number, y: number }} stageTap
+   * @param {(cx: number, cy: number) => boolean} canEnter
+   */
+  _applyTap(stageTap, canEnter) {
+    if (!this.maze || !this.layout) return;
+    const worldX = stageTap.x + this.camX;
+    const worldY = stageTap.y + this.camY;
+    const tapCell = worldToCell(this.layout, this.maze, worldX, worldY);
+    const playerCell = worldToCell(this.layout, this.maze, this.player.x, this.player.y);
+    // Prefer guided cell when parked (more accurate mid-animation)
+    const fromX = this.guided ? this.guided.cellX : playerCell.x;
+    const fromY = this.guided ? this.guided.cellY : playerCell.y;
+
+    const step = resolveTapStep(
+      this.maze, fromX, fromY, tapCell.x, tapCell.y, canEnter,
+    );
+    if (!step) {
+      // Soft bump feedback if they tapped a wall / blocked cell
+      if (this.bumpCooldown <= 0) {
+        const dx = tapCell.x - fromX;
+        const dy = tapCell.y - fromY;
+        if (dx !== 0 || dy !== 0) {
+          this.bumpCooldown = 0.2;
+          if (this.audio && this.audio.bump) this.audio.bump();
+        }
+      }
+      return;
+    }
+    this.tapGoal = step;
+    this.player.facing = step.dir;
+  }
+
+  /**
+   * Clear tap goal when the player has entered the target cell; park on center.
+   * Guided mode waits until near center so we don't cut a mid-leg short.
+   */
+  _settleTapGoal() {
+    if (!this.tapGoal || !this.layout || !this.maze) return;
+    const cell = worldToCell(this.layout, this.maze, this.player.x, this.player.y);
+    if (cell.x !== this.tapGoal.x || cell.y !== this.tapGoal.y) return;
+    const center = cellCenter(this.layout, cell.x, cell.y);
+    if (this.movementMode === 'guided') {
+      if (dist(this.player.x, this.player.y, center.x, center.y) > GUIDED_CENTER_EPS * 2) {
+        return;
+      }
+    }
+    this.player.x = center.x;
+    this.player.y = center.y;
+    this.tapGoal = null;
+    if (this.guided) {
+      this.guided.cellX = cell.x;
+      this.guided.cellY = cell.y;
+      this.guided.x = center.x;
+      this.guided.y = center.y;
+      this.guided.heading = null;
+    }
   }
 
   /**

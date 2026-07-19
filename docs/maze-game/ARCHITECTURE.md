@@ -302,11 +302,11 @@ Walls are **not** CSS grid borders. They are filled rounded prisms with highligh
 | Device | Mapping |
 |--------|---------|
 | Keyboard | Arrow keys / WASD → axis; Esc → pause; H → hint; R → restart |
-| Pointer / mouse | Virtual stick (large) on canvas; or drag-to-steer |
-| Touch | Same large virtual stick (Ironvale-style radius, kid-scaled larger) |
+| Pointer / mouse | **Tap a cell** to step; drag for virtual stick; or keyboard |
+| Touch | **Tap next square** (default); drag past threshold for stick |
 | Gamepad | If `navigator.getGamepads` present: left stick + face button for hint; Start = pause |
 
-**Default Easy touch:** large virtual stick + **guided movement** so rapid drag cannot tunnel through walls.
+**Default Easy touch:** tap adjacent open cell + **guided movement** so motion stays on corridor centers.
 
 **Collision safety:** movement systems integrate velocity with continuous segment vs wall tests (or cell-step with center snap in guided mode). Never teleport to raw pointer position through walls.
 

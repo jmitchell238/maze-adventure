@@ -15,7 +15,7 @@ Built for kids about **4 and 6**, with harder modes for older siblings and adult
 
 1. Start with **Adventure** or **Quick → Easy**.  
 2. Settings → **Movement: Guided** (or leave Auto).  
-3. The big on-screen stick is for fingers; arrows/WASD work on a computer.  
+3. **Tap the next square** to move — feels natural for little hands. Drag to use the stick, or use arrows/WASD on a computer.  
 4. Tap **?** for a sparkle trail — unlimited on Easy, never shames the player.  
 5. If they sit in a dead end, a soft helper appears after a couple of seconds.  
 6. No lives, no fail screens, no ads, no timers on Easy.

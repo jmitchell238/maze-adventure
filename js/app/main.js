@@ -280,9 +280,7 @@ function beginPlay() {
   const hint = document.getElementById('playHint');
   if (hint) {
     const ch = session.character();
-    hint.textContent = session.movementMode === 'guided'
-      ? `${ch.emoji} ${ch.goalHint} · drag the stick`
-      : `${ch.emoji} ${ch.goalHint}`;
+    hint.textContent = `${ch.emoji} ${ch.goalHint} · tap the next square`;
   }
 }
 
