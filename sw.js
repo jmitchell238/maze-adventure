@@ -1,5 +1,5 @@
 // Bump with GAME_VERSION in js/config/index.js (MAJOR.MINOR.PATCH).
-const CACHE = 'maze-adventure-1.2.005';
+const CACHE = 'maze-adventure-1.2.006';
 
 const ASSETS = [
   './',
@@ -76,7 +76,7 @@ function sameOrigin(url) {
 }
 
 function networkFirst(request) {
-  return fetch(request).then((res) => {
+  return fetch(request, { cache: 'no-store' }).then((res) => {
     if (res.ok && sameOrigin(request.url)) {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(request, copy));

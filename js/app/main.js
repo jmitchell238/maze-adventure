@@ -691,6 +691,10 @@ function registerSW() {
       .catch(() => {});
   }
   checkRemoteVersion();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkRemoteVersion();
+  });
+  window.addEventListener('focus', checkRemoteVersion);
   setInterval(checkRemoteVersion, 2 * 60 * 1000);
 }
 
