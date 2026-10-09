@@ -33,33 +33,6 @@ On Hard and above, some mazes have a yellow switch that opens a locked gate on t
 
 Enchanted Garden, Toy Castle, Candy Kingdom, Dinosaur Valley, Snowy Wonderland, Underwater Reef, Pirate Island and Space Station.
 
-## Running locally
+## Development
 
-```bash
-npm start
-```
-
-This serves the folder on http://localhost:8080. The game uses ES modules, so opening `index.html` from disk won't work.
-
-Canvas 2D for the maze, with regular HTML for the menus. Every generated maze is seeded and checked with a BFS to make sure it can be solved. Installable as a PWA.
-
-## Tests
-
-```bash
-npm test
-```
-
-## Docs
-
-| Doc | Covers |
-|-----|--------|
-| [ARCHITECTURE.md](./docs/maze-game/ARCHITECTURE.md) | Layers and file layout |
-| [GAME_DESIGN.md](./docs/maze-game/GAME_DESIGN.md) | How the game should feel to play |
-| [MAZE_GENERATION.md](./docs/maze-game/MAZE_GENERATION.md) | How mazes are generated |
-| [ART_DIRECTION.md](./docs/maze-game/ART_DIRECTION.md) | Visual style |
-| [TESTING_PLAN.md](./docs/maze-game/TESTING_PLAN.md) | Testing |
-| [ROADMAP.md](./docs/maze-game/ROADMAP.md) | Milestones |
-
-## Versioning
-
-`GAME_VERSION` is in `js/config/index.js`. When you bump it, set `CACHE` in `sw.js` to `'maze-adventure-' + GAME_VERSION`. The tests check that they match.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for running it locally, tests and releasing, and [docs/maze-game/ARCHITECTURE.md](docs/maze-game/ARCHITECTURE.md) for how the code is organized. The other design docs are listed in DEVELOPMENT.md.

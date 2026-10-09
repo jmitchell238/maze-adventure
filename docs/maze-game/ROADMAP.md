@@ -179,4 +179,4 @@ Do **not** jump to M5 artwork before M2–M3 foundations are solid.
 
 **Deferred:** moving maze pieces (too easy to confuse ages 4–6).
 
-**Suggested human next steps:** deploy via `DEPLOY.md`, tablet playtest with the kids, then only add features based on real feedback.
+**Suggested human next steps:** deploy (see `docs/DEVELOPMENT.md`), tablet playtest with the kids, then only add features based on real feedback.
