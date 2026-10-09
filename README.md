@@ -33,6 +33,10 @@ On Hard and above, some mazes have a yellow switch that opens a locked gate on t
 
 Enchanted Garden, Toy Castle, Candy Kingdom, Dinosaur Valley, Snowy Wonderland, Underwater Reef, Pirate Island and Space Station.
 
+## License
+
+© 2026 James Mitchell / 238 Apps. All rights reserved. You're welcome to play it at https://jmitchell238.github.io/maze-adventure/, but the code, art and other content may not be copied, reused, republished or sold without permission. Third-party material keeps its own license. See [LICENSE](LICENSE), the [Terms of Use](https://jmitchell238.github.io/arcade-hub/terms.html) and the [Privacy Policy](https://jmitchell238.github.io/arcade-hub/privacy.html).
+
 ## Development
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for running it locally, tests and releasing, and [docs/maze-game/ARCHITECTURE.md](docs/maze-game/ARCHITECTURE.md) for how the code is organized. The other design docs are listed in DEVELOPMENT.md.
